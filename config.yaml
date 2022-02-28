@@ -1,0 +1,14 @@
+# example config.yaml
+hass_host: #replace your home assistant ip or domain (string)
+hass_port: 8123 #replace with your home assistant websocket port (number)
+hass_token: #replace with a long lived access token (string)
+actions:
+  - action_type: call_service
+    description: Toggle Lab lights when pressing LeftCtrl & R
+    keys:
+      - LeftControl
+      - R
+    domain: light
+    service: toggle
+    service_data:
+       entity_id: light.lab_lights

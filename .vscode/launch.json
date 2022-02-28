@@ -1,0 +1,45 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'homeassistant_hotkeys'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=homeassistant_hotkeys",
+                    "--package=homeassistant_hotkeys"
+                ],
+                "filter": {
+                    "name": "homeassistant_hotkeys",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'homeassistant_hotkeys'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=homeassistant_hotkeys",
+                    "--package=homeassistant_hotkeys"
+                ],
+                "filter": {
+                    "name": "homeassistant_hotkeys",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
