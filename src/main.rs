@@ -5,6 +5,7 @@ use once_cell::sync::OnceCell;
 use std::{io, sync::{Arc, Mutex}, str::FromStr, fs};
 use serde::{Serialize, Deserialize};
 use clap::Parser;
+use directories::ProjectDirs;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 struct ConfigFlie {
@@ -29,7 +30,7 @@ static CLIENT: OnceCell<std::sync::Arc<std::sync::Mutex<hass_rs::HassClient>>> =
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     //read config
-    let config = read_config();
+    let config = read_config(String::from("config.yaml"));
     let (config,key, host,port) = parse_config(config);
     // Hass init
     println!("Creating the Websocket Client and Authenticate the session");
@@ -57,8 +58,8 @@ async fn make_call(domain: String, service: String, data: serde_json::Value ) {
     }
 }
 
-fn read_config() -> ConfigFlie  {
-    let config = match fs::read_to_string("config.yaml") {
+fn read_config(path: String) -> ConfigFlie  {
+    let config = match fs::read_to_string(path) {
         Ok(config) => config,
         Err(error) =>  panic!("Problem loading config file: {:?}", error),
     };
