@@ -4,6 +4,7 @@ use mki::{Keyboard};
 use once_cell::sync::OnceCell;
 use std::{io, sync::{Arc, Mutex}, str::FromStr, fs};
 use serde::{Serialize, Deserialize};
+use clap::Parser;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 struct ConfigFlie {
@@ -56,7 +57,6 @@ async fn make_call(domain: String, service: String, data: serde_json::Value ) {
     }
 }
 
-//Result<ConfigFlie, serde_yaml::Error>
 fn read_config() -> ConfigFlie  {
     let config = match fs::read_to_string("config.yaml") {
         Ok(config) => config,
