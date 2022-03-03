@@ -2,7 +2,8 @@ use async_std::task;
 use hass_rs::client;
 use mki::{Keyboard};
 use once_cell::sync::OnceCell;
-use std::{io, sync::{Arc, Mutex}, str::FromStr, fs};
+use core::panic;
+use std::{io, sync::{Arc, Mutex}, str::FromStr, fs, path::PathBuf};
 use serde::{Serialize, Deserialize};
 use clap::Parser;
 use directories::ProjectDirs;
@@ -28,21 +29,41 @@ struct ConfigEntry {
 static CLIENT: OnceCell<std::sync::Arc<std::sync::Mutex<hass_rs::HassClient>>> = OnceCell::new();
 
 #[async_std::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() {
+    // get path
+    let path = proj_conf_path();
     //read config
-    let config = read_config(String::from("config.yaml"));
-    let (config,key, host,port) = parse_config(config);
-    // Hass init
+    let config_file = read_config(path);
+    let (config,key, host,port) = parse_config(config_file);
+    // init the client
+    init_client(host, port, key).await.ok();
+    // create hotkeys
+    for entry in config {
+        create_hotkey(&entry.0, entry.1, entry.2, entry.3);
+    }
+    
+    // do not exit
+    io::stdin().read_line(&mut String::new()).unwrap();
+}
+
+fn proj_conf_path() -> PathBuf {
+    let path = ProjectDirs::from("", "",  "hass_hotkeys").unwrap();
+    let path = path.config_dir();
+    fs::create_dir_all(path).expect("Can't create project dir");
+    let path = path.join("config.yaml");
+    if !path.exists() {
+        fs::write(&path, b"# example config.yaml\r\nhass_host: #replace your home assistant ip or domain (string)\r\nhass_port: 8123 #replace with your home assistant websocket port (number)\r\nhass_token: #replace with a long lived access token (string)\r\nactions:\r\n  - action_type: call_service\r\n    description: Toggle Lab lights when pressing LeftCtrl & R\r\n    keys:\r\n      - LeftControl\r\n      - R\r\n    domain: light\r\n    service: toggle\r\n    service_data:\r\n       entity_id: light.lab_lights");
+        panic!("Config file created at {:?}, please edit the file to match your setup.", path)
+    }
+    path
+}
+
+async fn init_client(host: String, port: u16, key: String) -> Result<(), Box<dyn std::error::Error>> {
     println!("Creating the Websocket Client and Authenticate the session");
     let client = Arc::new(Mutex::new(client::connect(&host, port).await?));
     client.lock().unwrap().auth_with_longlivedtoken(&key).await?;
     CLIENT.set(client).ok();
     println!("WebSocket connection and authethication works");
-    //create actions
-    for entry in config {
-        create_hotkey(&entry.0, entry.1, entry.2, entry.3);
-    }
-    io::stdin().read_line(&mut String::new()).unwrap();
     Ok(())
 }
 
@@ -58,7 +79,7 @@ async fn make_call(domain: String, service: String, data: serde_json::Value ) {
     }
 }
 
-fn read_config(path: String) -> ConfigFlie  {
+fn read_config(path: PathBuf) -> ConfigFlie  {
     let config = match fs::read_to_string(path) {
         Ok(config) => config,
         Err(error) =>  panic!("Problem loading config file: {:?}", error),
