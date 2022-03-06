@@ -1,12 +1,28 @@
-use async_std::task;
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+use async_std::{task, sync::{Mutex, Arc}};
 use hass_rs::client;
 use mki::{Keyboard};
-use once_cell::sync::OnceCell;
+use once_cell::sync::{OnceCell, Lazy};
 use core::panic;
-use std::{io, sync::{Arc, Mutex}, str::FromStr, fs, path::PathBuf};
+use std::{str::FromStr, fs, path::PathBuf, sync::mpsc};
 use serde::{Serialize, Deserialize};
 use clap::Parser;
 use directories::ProjectDirs;
+use tray_item::TrayItem;
+use log::*;
+use simplelog::*;
+use edit;
+use msgbox::IconType;
+
+macro_rules! crash {
+    ( $( $p:tt ),* ) => {
+            {
+            error!($($p),*);
+            msgbox::create("Hss hotkeys - Error", format!($($p),*).as_str(), IconType::Error).unwrap();
+            panic!($($p),*);
+        }
+    };
+}
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 struct ConfigFlie {
@@ -26,45 +42,108 @@ struct ConfigEntry {
     service_data: Option<serde_json::Value>,
 }
 
-static CLIENT: OnceCell<std::sync::Arc<std::sync::Mutex<hass_rs::HassClient>>> = OnceCell::new();
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+struct Args {
+    /// Install as a service
+    #[clap(short, long)]
+    install: bool,
 
-#[async_std::main]
-async fn main() {
-    // get path
-    let path = proj_conf_path();
-    //read config
-    let config_file = read_config(path);
-    let (config,key, host,port) = parse_config(config_file);
-    // init the client
-    init_client(host, port, key).await.ok();
-    // create hotkeys
-    for entry in config {
-        create_hotkey(&entry.0, entry.1, entry.2, entry.3);
-    }
-    
-    // do not exit
-    io::stdin().read_line(&mut String::new()).unwrap();
+    /// Number of times to greet
+    #[clap(short, long, default_value_t = 1)]
+    count: u8,
 }
 
-fn proj_conf_path() -> PathBuf {
+static CLIENT: OnceCell<std::sync::Arc<async_std::sync::Mutex<hass_rs::HassClient>>> = OnceCell::new();
+static CONFIG_DIR: Lazy<PathBuf> = Lazy::new(||{
     let path = ProjectDirs::from("", "",  "hass_hotkeys").unwrap();
     let path = path.config_dir();
     fs::create_dir_all(path).expect("Can't create project dir");
     let path = path.join("config.yaml");
     if !path.exists() {
-        fs::write(&path, b"# example config.yaml\r\nhass_host: #replace your home assistant ip or domain (string)\r\nhass_port: 8123 #replace with your home assistant websocket port (number)\r\nhass_token: #replace with a long lived access token (string)\r\nactions:\r\n  - action_type: call_service\r\n    description: Toggle Lab lights when pressing LeftCtrl & R\r\n    keys:\r\n      - LeftControl\r\n      - R\r\n    domain: light\r\n    service: toggle\r\n    service_data:\r\n       entity_id: light.lab_lights");
-        panic!("Config file created at {:?}, please edit the file to match your setup.", path)
+        fs::write(&path, b"# example config.yaml\r\nhass_host: #replace your home assistant ip or domain (string)\r\nhass_port: 8123 #replace with your home assistant websocket port (number)\r\nhass_token: #replace with a long lived access token (string)\r\nactions:\r\n  - action_type: call_service\r\n    description: Toggle Lab lights when pressing LeftCtrl & R\r\n    keys:\r\n      - LeftControl\r\n      - R\r\n    domain: light\r\n    service: toggle\r\n    service_data:\r\n       entity_id: light.lab_lights").unwrap();
+        crash!("Config file created at {:?}, please edit the file to match your setup.", path)
     }
     path
+});
+
+fn main() {
+    CombinedLogger::init(
+        vec![
+            TermLogger::new(LevelFilter::Warn, Config::default(), TerminalMode::Mixed, ColorChoice::Auto),
+            WriteLogger::new(LevelFilter::Info, Config::default(), fs::File::create(CONFIG_DIR.as_path().parent().unwrap().parent().unwrap().join("log.txt")).unwrap()),
+        ]
+    ).unwrap();
+    let args = Args::parse();
+    if args.install {
+
+        return;
+    }
+    task::block_on(app());
 }
 
-async fn init_client(host: String, port: u16, key: String) -> Result<(), Box<dyn std::error::Error>> {
-    println!("Creating the Websocket Client and Authenticate the session");
-    let client = Arc::new(Mutex::new(client::connect(&host, port).await?));
-    client.lock().unwrap().auth_with_longlivedtoken(&key).await?;
+#[cfg(windows)]
+enum Message {
+    Quit,
+}
+#[cfg(windows)]
+fn tray() {
+    let mut tray = TrayItem::new("Hass Hotkeys", "ico").unwrap();
+
+    tray.add_label("Hass Hotkeys").unwrap();
+
+    tray.add_menu_item("Edit Config", || {
+        edit::edit_file(CONFIG_DIR.as_path()).unwrap();
+    })
+    .unwrap();
+
+    let (tx, rx) = mpsc::channel();
+
+    tray.add_menu_item("Quit", move || {
+        println!("Quit");
+        tx.send(Message::Quit).unwrap();
+    })
+    .unwrap();
+
+    loop {
+        match rx.recv() {
+            Ok(Message::Quit) => break,
+            _ => {}
+        }
+    }
+}
+
+async fn app(){
+    //read config
+    let config_file = read_config(CONFIG_DIR.to_path_buf());
+    let (config,key, host,port) = parse_config(config_file);
+    // init the client
+    init_client(host, port, key).await;
+    // create hotkeys
+    for entry in config {
+        create_hotkey(&entry.0, entry.1, entry.2, entry.3);
+    }
+     // create tray
+    tray();
+    
+    // do not exit
+    //io::stdin().read_line(&mut String::new()).unwrap();
+}
+
+async fn init_client(host: String, port: u16, key: String){
+    info!("Creating the Websocket Client and Authenticate the session");
+    let client = Arc::new(Mutex::new(
+        match client::connect(&host, port).await {
+            Ok(hass) => hass,
+            Err(e) => crash!("Config Error\n{}", e),
+        }
+    ));
+    match client.lock().await.auth_with_longlivedtoken(&key).await {
+        Ok(_) => (),
+        Err(e) => crash!("Auth Error\n{}", e)
+    };
     CLIENT.set(client).ok();
-    println!("WebSocket connection and authethication works");
-    Ok(())
+    info!("WebSocket connection and authethication works");
 }
 
 fn create_hotkey(key: &[Keyboard], domain: String, service: String, data: serde_json::Value) {
@@ -72,21 +151,24 @@ fn create_hotkey(key: &[Keyboard], domain: String, service: String, data: serde_
 }
 
 async fn make_call(domain: String, service: String, data: serde_json::Value ) {
-    let mut client = CLIENT.get().unwrap().lock().unwrap();
+    let mut client = CLIENT.get().unwrap().lock().await;
     match client.call_service(domain, service, Some(data)).await {
-        Ok(v) => println!("{:?}", v),
-        Err(err) => println!("Oh no, an error: {}", err),
+        Ok(v) => info!("{:?}", v),
+        Err(err) => {
+            msgbox::create("Hss hotkeys - Error", format!("Error calling service: {}", err).as_str(), IconType::Info).unwrap();
+            error!("Error calling service: {}", err)
+        },
     }
 }
 
 fn read_config(path: PathBuf) -> ConfigFlie  {
     let config = match fs::read_to_string(path) {
         Ok(config) => config,
-        Err(error) =>  panic!("Problem loading config file: {:?}", error),
+        Err(error) =>  crash!("Problem loading config file: {:?}", error),
     };
     let config = match serde_yaml::from_str::<ConfigFlie>(&config) {
         Ok(config) => config,
-        Err(error) => panic!("Invalid config: {:?}", error),
+        Err(error) => crash!("Invalid config: {:?}", error),
     };
     config
 }
@@ -98,13 +180,22 @@ fn parse_config(config: ConfigFlie) -> (Vec<(Vec<Keyboard>, String, String, serd
         for key in entry.keys {
             match Keyboard::from_str(&key) {
                 Ok(key) => keys.push(key),
-                Err(_) => panic!("Invalid key '{}' in config file", key),
+                Err(_) => crash!("Invalid key '{}' in config file", key),
             }
         };
         if entry.action_type == "call_service" {
-          let domain = entry.domain.expect("Action type is 'call_service' but config file is missing key 'domain'");
-           let service = entry.service.expect("Action type is 'call_service' but config file is missing key 'service'");
-           let service_data = entry.service_data.expect("Action type is 'call_service' but config file is missing key 'service_data'");
+          let domain = match entry.domain {
+              Some(s) => s,
+              _ => crash!("Action type is 'call_service' but config file is missing key 'domain'")
+          };
+          let service = match entry.service {
+            Some(s) => s,
+            _ => crash!("Action type is 'call_service' but config file is missing key 'service'")
+        };
+        let service_data = match entry.service_data {
+            Some(s) => s,
+            _ => crash!("Action type is 'call_service' but config file is missing key 'service_data'")
+        };
            result.push((keys, domain, service, service_data));
         }
     }
