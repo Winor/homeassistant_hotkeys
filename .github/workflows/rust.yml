@@ -11,14 +11,14 @@ env:
 jobs:
   build:
 
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
 
     steps:
     - uses: actions/checkout@v2
-    - name: Add target
-      run: rustup target add x86_64-pc-windows-gnu
-    - name: Add Toolchain
-      run: rustup toolchain install stable-x86_64-pc-windows-gnu
+#     - name: Add target
+#       run: rustup target add x86_64-pc-windows-gnu
+#     - name: Add Toolchain
+#       run: rustup toolchain install stable-x86_64-pc-windows-gnu
     - name: Build
       run: cargo build --verbose --target x86_64-pc-windows-gnu --release
     - name: Release
