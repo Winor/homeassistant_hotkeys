@@ -6,7 +6,6 @@ use once_cell::sync::{OnceCell, Lazy};
 use core::panic;
 use std::{str::FromStr, fs, path::PathBuf, sync::mpsc};
 use serde::{Serialize, Deserialize};
-use clap::Parser;
 use directories::ProjectDirs;
 use tray_item::TrayItem;
 use log::*;
@@ -42,18 +41,6 @@ struct ConfigEntry {
     service_data: Option<serde_json::Value>,
 }
 
-#[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
-struct Args {
-    /// Install as a service
-    #[clap(short, long)]
-    install: bool,
-
-    /// Number of times to greet
-    #[clap(short, long, default_value_t = 1)]
-    count: u8,
-}
-
 static CLIENT: OnceCell<std::sync::Arc<async_std::sync::Mutex<hass_rs::HassClient>>> = OnceCell::new();
 static CONFIG_DIR: Lazy<PathBuf> = Lazy::new(||{
     let path = ProjectDirs::from("", "",  "hass_hotkeys").unwrap();
@@ -74,11 +61,6 @@ fn main() {
             WriteLogger::new(LevelFilter::Info, Config::default(), fs::File::create(CONFIG_DIR.as_path().parent().unwrap().parent().unwrap().join("log.txt")).unwrap()),
         ]
     ).unwrap();
-    let args = Args::parse();
-    if args.install {
-
-        return;
-    }
     task::block_on(app());
 }
 
