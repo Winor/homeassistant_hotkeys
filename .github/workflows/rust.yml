@@ -20,7 +20,7 @@ jobs:
 #     - name: Add Toolchain
 #       run: rustup toolchain install stable-x86_64-pc-windows-gnu
     - name: Build
-      run: cargo build --verbose --target x86_64-pc-windows-gnu --release
+      run: cargo build --verbose --release
     - name: Release
       uses: softprops/action-gh-release@v1
       with:
