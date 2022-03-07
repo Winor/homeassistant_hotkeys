@@ -1,7 +1,7 @@
 # Home Assistant desktop shortcuts
-Create keyboard shortcuts for Home Assistant services.
+Create global keyboard shortcuts for Home Assistant services. Runs as a lightweight tray app.
 ## Download the app
-Go to the releases page and download the latest version or [click here to download](https://github.com/Winor/homeassistant_hotkeys/releases/latest/download/homeassistant_hotkeys.exe)
+Go to the releases page and download the latest version or [click here to download for Windows](https://github.com/Winor/homeassistant_hotkeys/releases/latest/download/homeassistant_hotkeys.exe), or clone and build the app yourself.
 ## Running the app:
 ### You need:
 - Windows 7+ (Only tested on Windows 11)
@@ -12,7 +12,7 @@ Go to the releases page and download the latest version or [click here to downlo
 - Go to Profile --> Long-Lived Access Tokens and create a token
 - Copy the token and paste it in your config.yaml file
 ## Running the app for the first time
-When running the App for the first time, it'll generate a config file at
+When running the app for the first time, it'll generate a config file at
 `%appdata%/hass_hotkeys/config/config.yaml` and quit. Edit the file to match your setup before starting the app again.
 
 
